@@ -1,0 +1,83 @@
+﻿@page "/register"
+@using Microsoft.AspNetCore.Components.Authorization;
+@using PruebaTecnica_JohanFranco.Client.Services;
+@using PruebaTecnica_JohanFranco.Shared.Access;
+@using PruebaTecnica_JohanFranco.Shared;
+@using global::Helpers;
+@inject NavigationManager navigation;
+@inject IAuthService authService;
+@inject IAccessService accessService;
+@inject IMessage message;
+<div class="contenedor">
+<h3>Registro</h3>
+<EditForm Model="user" OnValidSubmit="Register">
+    <DataAnnotationsValidator />
+
+     <span>NickName</span>
+    <InputText @bind-Value="user.NickName" DisplayName="NickName"></InputText>
+    <div class="text-danger dataAnnotationMessage"><ValidationMessage class="text-danger" For="@(() => user.NickName)" /></div>
+
+    <span>Correo Electrónico</span>
+    <InputText @bind-Value="user.Email" DisplayName="Correo Electrónico"></InputText>
+    <div class="text-danger dataAnnotationMessage"><ValidationMessage class="text-danger" For="@(() => user.Email)" /></div>
+
+    <span>Contraseña</span>
+        <InputText @bind-Value="user.Password" DisplayName="Contraseña" type="password"></InputText>
+    <div class="text-danger dataAnnotationMessage"><ValidationMessage class="text-danger" For="@(() => user.Password)" /></div>
+
+    <button class="btn btn-success" id="Registrar" type="submit">Registrar</button>
+
+</EditForm>
+</div>
+@code {
+    UserDTO user = new UserDTO();
+
+    [CascadingParameter]
+    private Task<AuthenticationState> authenticationState { get; set; }
+
+    protected async override Task OnInitializedAsync()
+    {
+        try
+        {
+
+            var authState = await authenticationState;
+            var usuario = authState.User;
+            if (usuario.Identity.IsAuthenticated)
+                navigation.NavigateTo("");
+
+        }
+        catch (Exception)
+        {
+
+        }
+
+    }
+    public async Task Register()
+    {
+        if(await accessService.RegisterUser(user))
+        {
+            await message.Success("Registrado con exito");
+            navigation.NavigateTo("login");
+        }
+        else
+        {
+            await message.Error("No se pudo registrar, intente más tarde");
+        }
+    }
+}
+
+<style>
+    .contenedor {
+        position: absolute;
+        top: 5%;
+        left: 25%;
+    }
+
+    span, button {
+        margin: 10px;
+    }
+
+    a {
+        cursor: pointer;
+    }
+</style>

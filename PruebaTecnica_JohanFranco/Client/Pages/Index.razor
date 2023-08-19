@@ -1,0 +1,144 @@
+﻿@page "/"
+@using Microsoft.AspNetCore.Components.Authorization;
+@using PruebaTecnica_JohanFranco.Client.Services.Contact;
+@using PruebaTecnica_JohanFranco.Shared;
+@using global::Helpers;
+@inject IContactoService contactService;
+@inject IMessage message;
+<div class="container-fluid">
+    <h3>Usuario : @NickName</h3>
+    <h3>Contactos</h3>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th scope="col">Fecha de Registro</th>
+                <th scope="col">Número Telefónico</th>
+                <th scope="col">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if(ContactList != null){
+            @foreach(var contact in ContactList)
+            {
+                <tr>
+                    <td>@contact.RegistrationDate</td>
+
+                    <td>@contact.PhoneNumber</td>
+                    <td>
+                        <div class="d-flex justify-content-between">
+
+                           <button class="btn btn-warning" @onclick="() => openModalEdit(contact)">Editar</button>          
+                           <button class="btn btn-danger" @onclick="() => eliminar(contact)">Eliminar</button>
+                        </div>
+                    </td>
+                </tr>
+            }
+            }
+        </tbody>
+    </table>
+    <button class="btn btn-success" @onclick="() => visibility = true">Agregar contacto</button>
+</div>
+
+
+
+
+<!-- Modal -->
+@if (visibility)
+{
+    <div class="card">
+        <h4>Agregar Contacto</h4>
+        <EditForm Model="contacto" OnValidSubmit="Guardar">
+            <DataAnnotationsValidator />
+            <span>Número de telefono</span>
+
+            <InputText type="number" @bind-Value="contacto.PhoneNumber" DisplayName="Número de telefóno"></InputText>
+            <div class="text-danger dataAnnotationMessage"><ValidationMessage class="text-danger" For="@(() => contacto.PhoneNumber)" /></div>
+
+
+            <button class="btn btn-primary" id="Ingresar" @onclick="() => visibility = false">Cerrar</button>
+            <button class="btn btn-success" id="Ingresar" type="submit">Guardar</button>
+
+        </EditForm>
+    </div>
+}
+
+
+@code{
+    [CascadingParameter]
+    private Task<AuthenticationState> authenticationState { get; set; }
+
+    List<ContactDTO> ContactList = new List<ContactDTO>();
+    ContactDTO contacto = new ContactDTO();
+    int IdUser = 0;
+    string NickName = string.Empty;
+    bool visibility = false;
+    bool editing = false;
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await authenticationState;
+        var usuario = authState.User;
+        var claims = authState.User.Claims.ToList();
+
+        IdUser = int.Parse(claims[1].Value);
+        NickName = claims[0].Value;
+        ContactList = await contactService.GetContactsByIdUser(IdUser);
+    }
+
+    private async Task eliminar(ContactDTO contact)
+    {
+        if(await message.Confirm($"¿Desea eliminar el contacto {contact.PhoneNumber}?",
+        "Eliminar contacto", TipoMensajeSweetAlert.warning))
+        {
+            if (await contactService.DeleteContact(contact.IdContacto))
+                await message.Success("Se ha eliminado correctamente");
+            else
+                await message.Error("No se ha podido eliminar el contacto");
+        }
+        ContactList = await contactService.GetContactsByIdUser(IdUser);
+
+    }
+
+    private async Task Guardar()
+    {
+        if(contacto.IdContacto == 0)
+        {
+            contacto.IdUser = IdUser;
+
+            if (await contactService.SaveContact(contacto))
+                await message.Success("Contacto Guardado");
+            else
+                await message.Error("Error al guardar e contacto");
+        }
+        else
+        {
+            if (await contactService.UpdateContact(contacto))
+                await message.Success("Contacto Guardado");
+            else
+                await message.Error("Error al guardar e contacto");
+        }
+
+        contacto = new ContactDTO();
+        visibility = false;
+        ContactList = await contactService.GetContactsByIdUser(IdUser);
+    }
+
+    public void openModalEdit(ContactDTO contactDTO)
+    {
+        contacto = contactDTO;
+        visibility = true;
+    }
+
+ 
+}
+
+<style>
+    .card{
+        position:absolute;
+        left: 25%;
+        top: 5%;
+        width: 50%;
+        padding:20px;
+        box-shadow: rgba(0, 0, 0, 0.16) 0px 1px 4px, rgb(51, 51, 51) 0px 0px 0px 3px;
+    }
+</style>

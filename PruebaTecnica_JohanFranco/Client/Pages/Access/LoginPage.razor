@@ -1,0 +1,84 @@
+﻿@page "/login"
+@using Microsoft.AspNetCore.Components.Authorization;
+@using PruebaTecnica_JohanFranco.Client.Services;
+@using PruebaTecnica_JohanFranco.Shared.Access;
+@using global::Helpers;
+@inject NavigationManager navigation;
+@inject IAuthService authService;
+@inject IAccessService accessService;
+@inject IMessage message;
+
+<div class="contenedor">
+<h3>Iniciar sesión</h3>
+<EditForm Model="credentials" OnValidSubmit="Login">
+    <DataAnnotationsValidator />
+    <span>Correo Electrónico</span>
+    <InputText @bind-Value="credentials.User" DisplayName="Correo Electrónico"></InputText>
+    <div class="text-danger dataAnnotationMessage"><ValidationMessage class="text-danger" For="@(() => credentials.User)" /></div>
+
+        <span>Contraseña</span>
+    <InputText type="password" @bind-Value="credentials.Password" DisplayName="Contraseña"></InputText>
+    <div class="text-danger dataAnnotationMessage"><ValidationMessage class="text-danger" For="@(() => credentials.Password)" /></div>
+
+        <span><a @onclick='() => navigation.NavigateTo("/register")'>Registrarse</a></span><br />
+    <button class="btn btn-success" id="Ingresar" type="submit">Ingresar</button>
+
+</EditForm>
+</div>
+@code {
+    UserCredentials credentials = new UserCredentials();
+
+
+    [CascadingParameter]
+    private Task<AuthenticationState> authenticationState { get; set; }
+
+    protected async override Task OnInitializedAsync()
+    {
+        try
+        {
+
+            var authState = await authenticationState;
+            var usuario = authState.User;
+            if (usuario.Identity.IsAuthenticated)
+                navigation.NavigateTo("");
+
+        }
+        catch (Exception)
+        {
+
+        }
+
+    }
+
+    public async Task Login()
+    {
+        var userToken = await accessService.GetUserToken(credentials);
+
+        if(userToken != null)
+        {
+            await authService.Login(userToken);
+            navigation.NavigateTo("");
+        }
+        else
+        {
+            await message.Error("CREDENCIALES INCORRECTAS");
+        }
+    }
+
+    
+}
+<style>
+    .contenedor{
+        position:absolute;
+        top:5%;
+        left: 25%;
+    }
+
+    span, button{
+        margin: 10px;
+    }
+
+    a{
+        cursor:pointer;
+    }
+</style>

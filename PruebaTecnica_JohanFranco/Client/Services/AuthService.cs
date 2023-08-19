@@ -1,0 +1,168 @@
+﻿using Helpers;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.JSInterop;
+using PruebaTecnica_JohanFranco.Shared.Access;
+using System.Net.Http.Headers;
+using System.Security.Claims;
+using System.Text.Json;
+
+
+namespace PruebaTecnica_JohanFranco.Client.Services
+{
+    public class AuthService: AuthenticationStateProvider, IAuthService
+    {
+        private readonly IJSRuntime js;
+        private readonly HttpClient httpClient;
+        private readonly IAccessService accessService;
+        private readonly string TOKENKEY = "TOKENKEY_Usuario";
+        private readonly string EXPIRATIONTOKENKEY = "EXPIRATIONTOKENKEY_Usuario";
+        private AuthenticationState Anonymous =>
+           new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
+        public AuthService(IJSRuntime js, HttpClient httpClient, IAccessService accessService)
+        {
+            this.js = js;
+            this.httpClient = httpClient;
+            this.accessService = accessService;
+        }
+
+        public async override Task<AuthenticationState> GetAuthenticationStateAsync()
+        {
+            var token = await js.GetFromLocalStorage(TOKENKEY);
+
+            if (string.IsNullOrEmpty(token))
+            {
+                return Anonymous;
+            }
+
+            var expirationTimeString = await js.GetFromLocalStorage(EXPIRATIONTOKENKEY);
+
+            if (DateTime.TryParse(expirationTimeString, out DateTime expirationTime))
+            {
+                if (IsTokenExpired(expirationTime))
+                {
+                    await CleanUp();
+                    return Anonymous;
+                }
+
+                if (ShouldRenewToken(expirationTime))
+                {
+                    token = await RenewToken(token);
+                }
+            }
+
+            return BuildAuthenticationState(token);
+        }
+
+        public async Task TryRenewToken()
+        {
+            var expirationTimeString = await js.GetFromLocalStorage(EXPIRATIONTOKENKEY);
+            DateTime expirationTime;
+
+            if (DateTime.TryParse(expirationTimeString, out expirationTime))
+            {
+                if (IsTokenExpired(expirationTime))
+                {
+                    await Logout();
+                }
+
+                if (ShouldRenewToken(expirationTime))
+                {
+                    var token = await js.GetFromLocalStorage(TOKENKEY);
+                    var newToken = await RenewToken(token);
+                    var authState = BuildAuthenticationState(newToken);
+                   NotifyAuthenticationStateChanged(Task.FromResult(authState));
+                }
+            }
+        }
+
+        private async Task<string> RenewToken(string token)
+        {
+            //var newToken = await accessService.RenewToken(token);
+            //await js.SetInLocalStorage(TOKENKEY, newToken.Token);
+            //await js.SetInLocalStorage(EXPIRATIONTOKENKEY, newToken.Expiration.ToString());
+            //return newToken.Token;
+
+            return "";
+        }
+
+        private bool ShouldRenewToken(DateTime expirationTime)
+        {
+            return expirationTime.Subtract(DateTime.UtcNow) < TimeSpan.FromMinutes(5);
+        }
+
+        private bool IsTokenExpired(DateTime expirationTime)
+        {
+            return expirationTime <= DateTime.UtcNow;
+        }
+
+        public AuthenticationState BuildAuthenticationState(string token)
+        {
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("bearer", token);
+            return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(ParseClaimsFromJwt(token), "jwt")));
+        }
+
+        private IEnumerable<Claim> ParseClaimsFromJwt(string jwt)
+        {
+            var claims = new List<Claim>();
+            var payload = jwt.Split('.')[1];
+            var jsonBytes = ParseBase64WithoutPadding(payload);
+            var keyValuePairs = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonBytes);
+
+            keyValuePairs.TryGetValue(ClaimTypes.Role, out object roles);
+
+            if (roles != null)
+            {
+                if (roles.ToString().Trim().StartsWith("["))
+                {
+                    var parsedRoles = JsonSerializer.Deserialize<string[]>(roles.ToString());
+
+                    foreach (var parsedRole in parsedRoles)
+                    {
+                        claims.Add(new Claim(ClaimTypes.Role, parsedRole));
+                    }
+                }
+                else
+                {
+                    claims.Add(new Claim(ClaimTypes.Role, roles.ToString()));
+                }
+
+                keyValuePairs.Remove(ClaimTypes.Role);
+            }
+
+            claims.AddRange(keyValuePairs.Select(kvp => new Claim(kvp.Key, kvp.Value.ToString())));
+            return claims;
+        }
+
+        private byte[] ParseBase64WithoutPadding(string base64)
+        {
+            switch (base64.Length % 4)
+            {
+                case 2: base64 += "=="; break;
+                case 3: base64 += "="; break;
+            }
+            return Convert.FromBase64String(base64);
+        }
+
+        public async Task Login(UserToken userToken)
+        {
+            await js.SetInLocalStorage(TOKENKEY, userToken.Token);
+            await js.SetInLocalStorage(EXPIRATIONTOKENKEY, userToken.Expiration.ToString());
+            var authState = BuildAuthenticationState(userToken.Token);
+           NotifyAuthenticationStateChanged(Task.FromResult(authState));
+        }
+
+        public async Task Logout()
+        {
+            await CleanUp();
+            await js.InvokeVoidAsync("Refresh");
+            NotifyAuthenticationStateChanged(Task.FromResult(Anonymous));
+        }
+
+        private async Task CleanUp()
+        {
+            await js.RemoveItem(TOKENKEY);
+            await js.RemoveItem(EXPIRATIONTOKENKEY);
+            httpClient.DefaultRequestHeaders.Authorization = null;
+        }
+    }
+}

@@ -1,0 +1,29 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+            <Authorizing>
+                <text>Custom authorizing...</text>
+            </Authorizing>
+            <NotAuthorized>
+                <RedirectToLogin/>
+            </NotAuthorized>
+        </AuthorizeRouteView>
+    </Found>
+    <NotFound>
+        <PageTitle>Not found</PageTitle>
+        <CascadingAuthenticationState>
+            <LayoutView Layout="@typeof(MainLayout)">
+                <PageTitle>Pagína no encontrada</PageTitle>
+                <div class="container-fluid h-100">
+                    <div class="row text-center h-25">
+                        <h3>MAVI</h3>
+                    </div>
+                    <div class="align-items-center text-center h-75">
+                        <p>Pagína no encontrada</p>
+                    </div>
+                </div>
+            </LayoutView>
+        </CascadingAuthenticationState>
+    </NotFound>
+</Router>
